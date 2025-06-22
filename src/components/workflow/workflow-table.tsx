@@ -2,7 +2,7 @@
 
 import { DialogFooter } from "@/components/ui/dialog";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import type {
     WorkflowStage,
     PotentialEntry,
@@ -47,6 +47,9 @@ import {
     UserPlusIcon,
     Edit3Icon,
     Trash2Icon,
+    ArrowUpDownIcon,
+    ArrowUpIcon,
+    ArrowDownIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { format, parseISO, isPast, isValid } from "date-fns";
@@ -64,7 +67,7 @@ import {
 import { useToast } from "@/components/ui/use-toast";
 import { Input } from "../ui/input";
 import { Textarea } from "../ui/textarea";
-import { useRouter } from "next/navigation"; // Import useRouter
+import { useRouter } from "next/navigation";
 
 type WorkflowData =
     | PotentialEntry
@@ -76,6 +79,19 @@ interface WorkflowTableProps {
     stage: WorkflowStage;
     data: WorkflowData[];
 }
+
+type SortField =
+    | "name"
+    | "email"
+    | "phone"
+    | "company"
+    | "latest_next_steps"
+    | "contact_due_date"
+    | "date_of_request"
+    | "initial_way_of_contact"
+    | "contract_number"
+    | "contract_conditions";
+type SortDirection = "asc" | "desc";
 
 // Helper to format date strings, handling null or invalid dates
 const formatDateSafe = (dateString?: string | null, dateFormat = "PPP") => {
@@ -91,7 +107,7 @@ const formatDateSafe = (dateString?: string | null, dateFormat = "PPP") => {
 
 // Helper to check if a date is overdue
 const isDateOverdue = (dateString?: string | null): boolean => {
-    if (!dateString) return false;
+    if (!dateString) return true;
     try {
         const parsedDate = parseISO(dateString);
         return isValid(parsedDate) && isPast(parsedDate);
@@ -101,7 +117,7 @@ const isDateOverdue = (dateString?: string | null): boolean => {
 };
 
 export default function WorkflowTable({ stage, data }: WorkflowTableProps) {
-    const router = useRouter(); // Initialize router
+    const router = useRouter();
     const { toast } = useToast();
     const [isCommDialogOpen, setIsCommDialogOpen] = useState(false);
     const [isEditContactDialogOpen, setIsEditContactDialogOpen] =
@@ -119,20 +135,156 @@ export default function WorkflowTable({ stage, data }: WorkflowTableProps) {
     const [moveNotes, setMoveNotes] = useState("");
     const [moveContractConditions, setMoveContractConditions] = useState("");
     const [moveContractNumber, setMoveContractNumber] = useState("");
-    // Remove moveInitialWayOfContact state as it's no longer needed for the dialog
-    // const [moveInitialWayOfContact, setMoveInitialWayOfContact] = useState<ContactSourceType>("outbound/cold")
+
+    // Sorting state - default to contact_due_date with earliest first
+    const [sortField, setSortField] = useState<SortField>("contact_due_date");
+    const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+
+    // Sort the data
+    const sortedData = useMemo(() => {
+        if (!data || data.length === 0) return [];
+
+        return [...data].sort((a, b) => {
+            const contactA = (a as any).contact as Contact & {
+                latest_next_steps?: string;
+                latest_contact_again_due_date?: string;
+            };
+            const contactB = (b as any).contact as Contact & {
+                latest_next_steps?: string;
+                latest_contact_again_due_date?: string;
+            };
+
+            let aValue: any;
+            let bValue: any;
+
+            switch (sortField) {
+                case "name":
+                    aValue = contactA.name?.toLowerCase() || "";
+                    bValue = contactB.name?.toLowerCase() || "";
+                    break;
+                case "email":
+                    aValue = contactA.email?.toLowerCase() || "";
+                    bValue = contactB.email?.toLowerCase() || "";
+                    break;
+                case "phone":
+                    aValue = contactA.telephone?.toLowerCase() || "";
+                    bValue = contactB.telephone?.toLowerCase() || "";
+                    break;
+                case "company":
+                    aValue = contactA.company?.toLowerCase() || "";
+                    bValue = contactB.company?.toLowerCase() || "";
+                    break;
+                case "latest_next_steps":
+                    aValue = contactA.latest_next_steps?.toLowerCase() || "";
+                    bValue = contactB.latest_next_steps?.toLowerCase() || "";
+                    break;
+                case "contact_due_date":
+                    aValue = contactA.latest_contact_again_due_date
+                        ? new Date(
+                              contactA.latest_contact_again_due_date
+                          ).getTime()
+                        : Number.MAX_SAFE_INTEGER;
+                    bValue = contactB.latest_contact_again_due_date
+                        ? new Date(
+                              contactB.latest_contact_again_due_date
+                          ).getTime()
+                        : Number.MAX_SAFE_INTEGER;
+                    break;
+                case "date_of_request":
+                    if (stage === "incoming_requests") {
+                        aValue = (a as IncomingRequestEntry).date_of_request
+                            ? new Date(
+                                  (a as IncomingRequestEntry).date_of_request!
+                              ).getTime()
+                            : 0;
+                        bValue = (b as IncomingRequestEntry).date_of_request
+                            ? new Date(
+                                  (b as IncomingRequestEntry).date_of_request!
+                              ).getTime()
+                            : 0;
+                    } else {
+                        return 0;
+                    }
+                    break;
+                case "initial_way_of_contact":
+                    if (stage === "contacted_contacts") {
+                        aValue =
+                            (
+                                a as ContactedContactEntry
+                            ).initial_way_of_contact?.toLowerCase() || "";
+                        bValue =
+                            (
+                                b as ContactedContactEntry
+                            ).initial_way_of_contact?.toLowerCase() || "";
+                    } else {
+                        return 0;
+                    }
+                    break;
+                case "contract_number":
+                    if (stage === "clients") {
+                        aValue =
+                            (a as ClientEntry).contract_number?.toLowerCase() ||
+                            "";
+                        bValue =
+                            (b as ClientEntry).contract_number?.toLowerCase() ||
+                            "";
+                    } else {
+                        return 0;
+                    }
+                    break;
+                case "contract_conditions":
+                    if (stage === "clients") {
+                        aValue =
+                            (
+                                a as ClientEntry
+                            ).contract_conditions?.toLowerCase() || "";
+                        bValue =
+                            (
+                                b as ClientEntry
+                            ).contract_conditions?.toLowerCase() || "";
+                    } else {
+                        return 0;
+                    }
+                    break;
+                default:
+                    return 0;
+            }
+
+            if (aValue < bValue) return sortDirection === "asc" ? -1 : 1;
+            if (aValue > bValue) return sortDirection === "asc" ? 1 : -1;
+            return 0;
+        });
+    }, [data, sortField, sortDirection, stage]);
+
+    const handleSort = (field: SortField) => {
+        if (sortField === field) {
+            setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+        } else {
+            setSortField(field);
+            setSortDirection("asc");
+        }
+    };
+
+    const getSortIcon = (field: SortField) => {
+        if (sortField !== field) {
+            return <ArrowUpDownIcon className="ml-2 h-4 w-4" />;
+        }
+        return sortDirection === "asc" ? (
+            <ArrowUpIcon className="ml-2 h-4 w-4" />
+        ) : (
+            <ArrowDownIcon className="ml-2 h-4 w-4" />
+        );
+    };
 
     const handleAddCommunication = async (
         formData: AddCommunicationFormData
     ) => {
         if (!selectedContact) return;
-        // Indicate submission start
         const result = await addCommunication(formData);
-        // Indicate submission end
         if (result.success) {
             toast({ title: "Success", description: result.message });
             setIsCommDialogOpen(false);
-            router.refresh(); // Refresh data on success
+            router.refresh();
         } else {
             toast({
                 title: "Error",
@@ -144,13 +296,11 @@ export default function WorkflowTable({ stage, data }: WorkflowTableProps) {
 
     const handleUpdateContact = async (formData: Partial<Contact>) => {
         if (!selectedContact?.id) return;
-        // Indicate submission start
         const result = await updateContact(selectedContact.id, formData);
-        // Indicate submission end
         if (result.success) {
             toast({ title: "Success", description: result.message });
             setIsEditContactDialogOpen(false);
-            router.refresh(); // Refresh data on success
+            router.refresh();
         } else {
             toast({
                 title: "Error",
@@ -172,7 +322,7 @@ export default function WorkflowTable({ stage, data }: WorkflowTableProps) {
             const result = await deleteContact(contactId);
             if (result.success) {
                 toast({ title: "Success", description: result.message });
-                router.refresh(); // Refresh data on success
+                router.refresh();
             } else {
                 toast({
                     title: "Error",
@@ -205,11 +355,9 @@ export default function WorkflowTable({ stage, data }: WorkflowTableProps) {
             targetStage,
             additionalFields,
         });
-        // Reset form fields for move dialog
         setMoveNotes("");
         setMoveContractConditions("");
         setMoveContractNumber("");
-        // setMoveInitialWayOfContact("outbound/cold")
         setIsMoveDialogOpen(true);
     };
 
@@ -222,13 +370,11 @@ export default function WorkflowTable({ stage, data }: WorkflowTableProps) {
         try {
             if (targetStage === "contacted_contacts") {
                 if (currentStage === "potentials") {
-                    // initialWayOfContact is now handled by the server action (fixed to outbound/cold)
                     result = await movePotentialToContacted(
                         contactId,
                         moveNotes
                     );
                 } else if (currentStage === "incoming_requests") {
-                    // initialWayOfContact is now handled by the server action (fixed to incoming/warm)
                     result = await moveIncomingRequestToContacted(
                         contactId,
                         moveNotes
@@ -256,7 +402,7 @@ export default function WorkflowTable({ stage, data }: WorkflowTableProps) {
             if (result?.success) {
                 toast({ title: "Success", description: result.message });
                 setIsMoveDialogOpen(false);
-                router.refresh(); // Refresh data on success
+                router.refresh();
             } else {
                 toast({
                     title: "Error",
@@ -282,26 +428,122 @@ export default function WorkflowTable({ stage, data }: WorkflowTableProps) {
 
     const commonTableHeaders = (
         <>
-            <TableHead className="w-[200px]">Name</TableHead>
-            <TableHead>Email</TableHead>
-            <TableHead>Phone</TableHead>
-            <TableHead>Company</TableHead>
-            <TableHead>Latest Next Steps</TableHead>
-            <TableHead>Contact Due Date</TableHead>
+            <TableHead className="w-[200px]">
+                <Button
+                    variant="ghost"
+                    onClick={() => handleSort("name")}
+                    className="h-auto p-0 font-semibold"
+                >
+                    Name
+                    {getSortIcon("name")}
+                </Button>
+            </TableHead>
+            <TableHead>
+                <Button
+                    variant="ghost"
+                    onClick={() => handleSort("email")}
+                    className="h-auto p-0 font-semibold"
+                >
+                    Email
+                    {getSortIcon("email")}
+                </Button>
+            </TableHead>
+            <TableHead>
+                <Button
+                    variant="ghost"
+                    onClick={() => handleSort("phone")}
+                    className="h-auto p-0 font-semibold"
+                >
+                    Phone
+                    {getSortIcon("phone")}
+                </Button>
+            </TableHead>
+            <TableHead>
+                <Button
+                    variant="ghost"
+                    onClick={() => handleSort("company")}
+                    className="h-auto p-0 font-semibold"
+                >
+                    Company
+                    {getSortIcon("company")}
+                </Button>
+            </TableHead>
+            <TableHead>
+                <Button
+                    variant="ghost"
+                    onClick={() => handleSort("latest_next_steps")}
+                    className="h-auto p-0 font-semibold"
+                >
+                    Latest Next Steps
+                    {getSortIcon("latest_next_steps")}
+                </Button>
+            </TableHead>
+            <TableHead>
+                <Button
+                    variant="ghost"
+                    onClick={() => handleSort("contact_due_date")}
+                    className="h-auto p-0 font-semibold"
+                >
+                    Contact Due Date
+                    {getSortIcon("contact_due_date")}
+                </Button>
+            </TableHead>
         </>
     );
 
     const stageSpecificHeaders = () => {
         switch (stage) {
             case "incoming_requests":
-                return <TableHead>Date of Request</TableHead>;
+                return (
+                    <TableHead>
+                        <Button
+                            variant="ghost"
+                            onClick={() => handleSort("date_of_request")}
+                            className="h-auto p-0 font-semibold"
+                        >
+                            Date of Request
+                            {getSortIcon("date_of_request")}
+                        </Button>
+                    </TableHead>
+                );
             case "contacted_contacts":
-                return <TableHead>Initial Contact Method</TableHead>;
+                return (
+                    <TableHead>
+                        <Button
+                            variant="ghost"
+                            onClick={() => handleSort("initial_way_of_contact")}
+                            className="h-auto p-0 font-semibold"
+                        >
+                            Initial Contact Method
+                            {getSortIcon("initial_way_of_contact")}
+                        </Button>
+                    </TableHead>
+                );
             case "clients":
                 return (
                     <>
-                        <TableHead>Contract Number</TableHead>
-                        <TableHead>Contract Conditions</TableHead>
+                        <TableHead>
+                            <Button
+                                variant="ghost"
+                                onClick={() => handleSort("contract_number")}
+                                className="h-auto p-0 font-semibold"
+                            >
+                                Contract Number
+                                {getSortIcon("contract_number")}
+                            </Button>
+                        </TableHead>
+                        <TableHead>
+                            <Button
+                                variant="ghost"
+                                onClick={() =>
+                                    handleSort("contract_conditions")
+                                }
+                                className="h-auto p-0 font-semibold"
+                            >
+                                Contract Conditions
+                                {getSortIcon("contract_conditions")}
+                            </Button>
+                        </TableHead>
                     </>
                 );
             default:
@@ -322,12 +564,12 @@ export default function WorkflowTable({ stage, data }: WorkflowTableProps) {
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {data.map((item) => {
+                    {sortedData.map((item) => {
                         const contact = (item as any).contact as Contact & {
                             latest_next_steps?: string;
                             latest_contact_again_due_date?: string;
                         };
-                        if (!contact) return null; // Should not happen with current data fetching
+                        if (!contact) return null;
 
                         const isOverdue = isDateOverdue(
                             contact.latest_contact_again_due_date
@@ -502,21 +744,6 @@ export default function WorkflowTable({ stage, data }: WorkflowTableProps) {
                                                                 Client
                                                             </DropdownMenuItem>
                                                         )}
-                                                        {stage !==
-                                                            "potentials" &&
-                                                            stage !==
-                                                                "incoming_requests" &&
-                                                            stage !==
-                                                                "contacted_contacts" &&
-                                                            stage !==
-                                                                "clients" && (
-                                                                <DropdownMenuItem
-                                                                    disabled
-                                                                >
-                                                                    No moves
-                                                                    available
-                                                                </DropdownMenuItem>
-                                                            )}
                                                     </DropdownMenuSubContent>
                                                 </DropdownMenuPortal>
                                             </DropdownMenuSub>
@@ -542,22 +769,19 @@ export default function WorkflowTable({ stage, data }: WorkflowTableProps) {
                 </TableBody>
             </Table>
 
-            {/* Add Communication Dialog */}
+            {/* Communication Dialog */}
             <Dialog open={isCommDialogOpen} onOpenChange={setIsCommDialogOpen}>
                 <DialogContent className="sm:max-w-lg">
                     <DialogHeader>
                         <DialogTitle>
                             Add Communication for {selectedContact?.name}
                         </DialogTitle>
-                        <DialogDescription>
-                            Log a new communication record.
-                        </DialogDescription>
                     </DialogHeader>
                     {selectedContact && (
                         <CommunicationForm
                             contactId={selectedContact.id}
                             onSubmit={handleAddCommunication}
-                            isSubmitting={false} // This should be managed by the form itself or passed down
+                            isSubmitting={false}
                         />
                     )}
                 </DialogContent>
@@ -568,143 +792,94 @@ export default function WorkflowTable({ stage, data }: WorkflowTableProps) {
                 open={isEditContactDialogOpen}
                 onOpenChange={setIsEditContactDialogOpen}
             >
-                <DialogContent className="sm:max-w-2xl">
+                <DialogContent className="sm:max-w-md">
                     <DialogHeader>
-                        <DialogTitle>
-                            Edit Contact: {selectedContact?.name}
-                        </DialogTitle>
+                        <DialogTitle>Edit Contact</DialogTitle>
                         <DialogDescription>
-                            Update the contact's details.
+                            Update the contact information below.
                         </DialogDescription>
                     </DialogHeader>
                     {selectedContact && (
                         <ContactForm
                             initialData={selectedContact}
                             onSubmit={handleUpdateContact}
-                            isSubmitting={false} // Manage within form or pass down
-                            submitButtonText="Save Changes"
+                            isSubmitting={false}
                         />
                     )}
                 </DialogContent>
             </Dialog>
 
-            {/* Move Contact Dialog */}
+            {/* Move Dialog */}
             <Dialog open={isMoveDialogOpen} onOpenChange={setIsMoveDialogOpen}>
-                <DialogContent>
+                <DialogContent className="sm:max-w-md">
                     <DialogHeader>
-                        <DialogTitle>
-                            Move Contact to{" "}
-                            {moveActionData?.targetStage.replace("_", " ")}
-                        </DialogTitle>
+                        <DialogTitle>Move Contact</DialogTitle>
                         <DialogDescription>
-                            Provide additional details for the move.
+                            {moveActionData && (
+                                <>
+                                    Moving contact to{" "}
+                                    <strong>
+                                        {moveActionData.targetStage.replace(
+                                            "_",
+                                            " "
+                                        )}
+                                    </strong>
+                                    . Please provide additional details below.
+                                </>
+                            )}
                         </DialogDescription>
                     </DialogHeader>
-                    <div className="space-y-4 py-4">
-                        {/* Potentials -> Contacted or Incoming Request -> Contacted */}
-                        {moveActionData?.targetStage ===
-                            "contacted_contacts" && (
-                            <>
-                                <div className="space-y-1">
-                                    <label
-                                        htmlFor="moveNotes"
-                                        className="text-sm font-medium"
-                                    >
-                                        Notes for Contacted Stage
-                                    </label>
-                                    <Textarea
-                                        id="moveNotes"
-                                        value={moveNotes}
-                                        onChange={(e) =>
-                                            setMoveNotes(e.target.value)
-                                        }
-                                        placeholder="e.g., Initial call details, interest level"
-                                    />
-                                </div>
-                                {/*
-                  Remove this block from the move dialog:
-                  {moveActionData?.currentStage === "potentials" && ( // Only show for Potential -> Contacted
-                    <div className="space-y-1">
-                      <label htmlFor="initialWayOfContact" className="text-sm font-medium">
-                        Initial Way of Contact
-                      </label>
-                      <Select
-                        value={moveInitialWayOfContact}
-                        onValueChange={(value: ContactSourceType) => setMoveInitialWayOfContact(value)}
-                      >
-                        <SelectTrigger id="initialWayOfContact">
-                          <SelectValue placeholder="Select contact method" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="outbound/cold">Outbound / Cold</SelectItem>
-                          <SelectItem value="incoming/warm">Incoming / Warm</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
-                */}
-                            </>
-                        )}
-                        {/* Potentials -> Incoming Request */}
-                        {moveActionData?.targetStage === "incoming_requests" &&
-                            moveActionData?.currentStage === "potentials" && (
-                                <div className="space-y-1">
-                                    <label
-                                        htmlFor="moveNotes"
-                                        className="text-sm font-medium"
-                                    >
-                                        Notes for Incoming Request
-                                    </label>
-                                    <Textarea
-                                        id="moveNotes"
-                                        value={moveNotes}
-                                        onChange={(e) =>
-                                            setMoveNotes(e.target.value)
-                                        }
-                                        placeholder="e.g., Details of their request"
-                                    />
-                                </div>
-                            )}
-                        {/* Contacted -> Client */}
+                    <div className="space-y-4">
                         {moveActionData?.targetStage === "clients" && (
                             <>
-                                <div className="space-y-1">
-                                    <label
-                                        htmlFor="moveContractNumber"
-                                        className="text-sm font-medium"
-                                    >
+                                <div>
+                                    <label className="text-sm font-medium">
                                         Contract Number
                                     </label>
                                     <Input
-                                        id="moveContractNumber"
                                         value={moveContractNumber}
                                         onChange={(e) =>
                                             setMoveContractNumber(
                                                 e.target.value
                                             )
                                         }
-                                        placeholder="e.g., CN-2024-001"
+                                        placeholder="Enter contract number..."
                                     />
                                 </div>
-                                <div className="space-y-1">
-                                    <label
-                                        htmlFor="moveContractConditions"
-                                        className="text-sm font-medium"
-                                    >
+                                <div>
+                                    <label className="text-sm font-medium">
                                         Contract Conditions
                                     </label>
                                     <Textarea
-                                        id="moveContractConditions"
                                         value={moveContractConditions}
                                         onChange={(e) =>
                                             setMoveContractConditions(
                                                 e.target.value
                                             )
                                         }
-                                        placeholder="e.g., Payment terms, service scope"
+                                        placeholder="Enter contract conditions..."
+                                        rows={3}
                                     />
                                 </div>
                             </>
+                        )}
+                        {(moveActionData?.targetStage ===
+                            "contacted_contacts" ||
+                            moveActionData?.targetStage ===
+                                "incoming_requests") && (
+                            <div>
+                                <label className="text-sm font-medium">
+                                    Notes
+                                </label>
+                                <Textarea
+                                    value={moveNotes}
+                                    onChange={(e) =>
+                                        setMoveNotes(e.target.value)
+                                    }
+                                    placeholder="Enter notes about this move..."
+                                    rows={3}
+                                />
+                            </div>
                         )}
                     </div>
                     <DialogFooter>
@@ -715,7 +890,7 @@ export default function WorkflowTable({ stage, data }: WorkflowTableProps) {
                             Cancel
                         </Button>
                         <Button onClick={executeMoveAction}>
-                            Confirm Move
+                            Move Contact
                         </Button>
                     </DialogFooter>
                 </DialogContent>

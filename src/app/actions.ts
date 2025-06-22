@@ -17,7 +17,7 @@ import type {
 import { revalidatePath } from "next/cache";
 
 const getContactWithLatestComm = async (
-    supabase: ReturnType<typeof createSupabaseServerClient>,
+    supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
     contactId: string
 ): Promise<LatestCommunicationDetails> => {
     const { data: commDetails, error: commError } = await supabase.rpc(
@@ -142,7 +142,9 @@ export async function getClients(): Promise<ClientEntry[]> {
     );
 }
 
-export async function getAllContacts(): Promise<Contact[]> {
+export async function getAllContacts(): Promise<
+    (Contact & LatestCommunicationDetails)[]
+> {
     const supabase = await createSupabaseServerClient();
     const { data, error } = await supabase
         .from("contacts")
@@ -152,7 +154,24 @@ export async function getAllContacts(): Promise<Contact[]> {
         console.error("Error fetching contacts:", error);
         return [];
     }
-    return data || [];
+
+    if (!data) return [];
+
+    // Enrich each contact with their latest communication details
+    const enrichedContacts = await Promise.all(
+        data.map(async (contact: Contact) => {
+            const latestCommDetails = await getContactWithLatestComm(
+                supabase,
+                contact.id
+            );
+            return {
+                ...contact,
+                ...latestCommDetails,
+            };
+        })
+    );
+
+    return enrichedContacts;
 }
 
 export async function getContactById(

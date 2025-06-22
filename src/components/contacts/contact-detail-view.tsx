@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import type {
     Contact,
     Communication,
@@ -40,6 +40,9 @@ import {
     PackageIcon,
     FileTextIcon,
     StepForwardIcon,
+    ArrowUpDownIcon,
+    ArrowUpIcon,
+    ArrowDownIcon,
 } from "lucide-react";
 import { format, parseISO, isValid } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
@@ -51,6 +54,13 @@ import { useRouter } from "next/navigation"; // Import useRouter
 interface ContactDetailViewProps {
     contactDetails: Contact & { communications: Communication[] };
 }
+
+type CommunicationSortField =
+    | "date"
+    | "notes"
+    | "next_steps"
+    | "contact_again_due_date";
+type SortDirection = "asc" | "desc";
 
 const formatDateSafe = (dateString?: string | null, dateFormat = "PPP") => {
     if (!dateString) return "N/A";
@@ -67,20 +77,81 @@ const formatDateSafe = (dateString?: string | null, dateFormat = "PPP") => {
 export default function ContactDetailView({
     contactDetails: initialContactDetails,
 }: ContactDetailViewProps) {
-    const router = useRouter(); // Initialize router
+    const router = useRouter();
     const { toast } = useToast();
-    // The local state `contactDetails` will be updated by router.refresh() implicitly
-    // No need for `setContactDetails` for data that comes from the server after refresh.
-    // const [contactDetails, setContactDetails] = useState(initialContactDetails)
-    // Instead, use initialContactDetails directly or derive from props if needed for optimistic updates.
-    // For simplicity and to ensure data consistency, we'll rely on router.refresh()
     const [isCommDialogOpen, setIsCommDialogOpen] = useState(false);
     const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
 
-    // Use initialContactDetails directly for rendering, router.refresh() will update it.
-    const sortedCommunications = [...initialContactDetails.communications].sort(
-        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+    // Sorting state for communications - default to contact_again_due_date (earliest first)
+    const [sortField, setSortField] = useState<CommunicationSortField>(
+        "contact_again_due_date"
     );
+    const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+
+    // Sort the communications
+    const sortedCommunications = useMemo(() => {
+        if (
+            !initialContactDetails.communications ||
+            initialContactDetails.communications.length === 0
+        ) {
+            return [];
+        }
+
+        return [...initialContactDetails.communications].sort((a, b) => {
+            let aValue: any;
+            let bValue: any;
+
+            switch (sortField) {
+                case "date":
+                    aValue = a.date ? new Date(a.date).getTime() : 0;
+                    bValue = b.date ? new Date(b.date).getTime() : 0;
+                    break;
+                case "notes":
+                    aValue = a.notes?.toLowerCase() || "";
+                    bValue = b.notes?.toLowerCase() || "";
+                    break;
+                case "next_steps":
+                    aValue = a.next_steps?.toLowerCase() || "";
+                    bValue = b.next_steps?.toLowerCase() || "";
+                    break;
+                case "contact_again_due_date":
+                    // Sort by due date, with null values last
+                    aValue = a.contact_again_due_date
+                        ? new Date(a.contact_again_due_date).getTime()
+                        : Number.MAX_SAFE_INTEGER;
+                    bValue = b.contact_again_due_date
+                        ? new Date(b.contact_again_due_date).getTime()
+                        : Number.MAX_SAFE_INTEGER;
+                    break;
+                default:
+                    return 0;
+            }
+
+            if (aValue < bValue) return sortDirection === "asc" ? -1 : 1;
+            if (aValue > bValue) return sortDirection === "asc" ? 1 : -1;
+            return 0;
+        });
+    }, [initialContactDetails.communications, sortField, sortDirection]);
+
+    const handleSort = (field: CommunicationSortField) => {
+        if (sortField === field) {
+            setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+        } else {
+            setSortField(field);
+            setSortDirection("asc");
+        }
+    };
+
+    const getSortIcon = (field: CommunicationSortField) => {
+        if (sortField !== field) {
+            return <ArrowUpDownIcon className="ml-2 h-4 w-4" />;
+        }
+        return sortDirection === "asc" ? (
+            <ArrowUpIcon className="ml-2 h-4 w-4" />
+        ) : (
+            <ArrowDownIcon className="ml-2 h-4 w-4" />
+        );
+    };
 
     const handleAddCommunication = async (
         formData: AddCommunicationFormData
@@ -261,10 +332,58 @@ export default function ContactDetailView({
                             <Table>
                                 <TableHeader>
                                     <TableRow>
-                                        <TableHead>Date</TableHead>
-                                        <TableHead>Notes</TableHead>
-                                        <TableHead>Next Steps</TableHead>
-                                        <TableHead>Due Date</TableHead>
+                                        <TableHead>
+                                            <Button
+                                                variant="ghost"
+                                                onClick={() =>
+                                                    handleSort("date")
+                                                }
+                                                className="h-auto p-0 font-semibold"
+                                            >
+                                                Date
+                                                {getSortIcon("date")}
+                                            </Button>
+                                        </TableHead>
+                                        <TableHead>
+                                            <Button
+                                                variant="ghost"
+                                                onClick={() =>
+                                                    handleSort("notes")
+                                                }
+                                                className="h-auto p-0 font-semibold"
+                                            >
+                                                Notes
+                                                {getSortIcon("notes")}
+                                            </Button>
+                                        </TableHead>
+                                        <TableHead>
+                                            <Button
+                                                variant="ghost"
+                                                onClick={() =>
+                                                    handleSort("next_steps")
+                                                }
+                                                className="h-auto p-0 font-semibold"
+                                            >
+                                                Next Steps
+                                                {getSortIcon("next_steps")}
+                                            </Button>
+                                        </TableHead>
+                                        <TableHead>
+                                            <Button
+                                                variant="ghost"
+                                                onClick={() =>
+                                                    handleSort(
+                                                        "contact_again_due_date"
+                                                    )
+                                                }
+                                                className="h-auto p-0 font-semibold"
+                                            >
+                                                Due Date
+                                                {getSortIcon(
+                                                    "contact_again_due_date"
+                                                )}
+                                            </Button>
+                                        </TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
