@@ -1,7 +1,11 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import type { Contact, LatestCommunicationDetails } from "@/lib/types";
+import type {
+    Contact,
+    LatestCommunicationDetails,
+    WorkflowStage,
+} from "@/lib/types";
 import {
     Table,
     TableBody,
@@ -43,7 +47,10 @@ import { useToast } from "@/components/ui/use-toast";
 import { useRouter } from "next/navigation";
 
 interface ContactsTableProps {
-    contacts: (Contact & LatestCommunicationDetails)[];
+    contacts: (Contact &
+        LatestCommunicationDetails & {
+            workflow_stage?: WorkflowStage | null;
+        })[];
 }
 
 type SortField =
@@ -52,7 +59,8 @@ type SortField =
     | "company"
     | "product"
     | "created_at"
-    | "contact_due_date";
+    | "contact_due_date"
+    | "workflow_stage";
 type SortDirection = "asc" | "desc";
 
 const formatDateSafe = (dateString?: string | null, dateFormat = "PPP") => {
@@ -75,6 +83,24 @@ const isDateOverdue = (dateString?: string | null): boolean => {
         return isValid(parsedDate) && isPast(parsedDate);
     } catch (error) {
         return false;
+    }
+};
+
+// Helper to format workflow stage for display
+const formatWorkflowStage = (stage?: WorkflowStage | null): string => {
+    if (!stage) return "Not in workflow";
+
+    switch (stage) {
+        case "potentials":
+            return "Potential";
+        case "incoming_requests":
+            return "Incoming Request";
+        case "contacted_contacts":
+            return "Contacted";
+        case "clients":
+            return "Client";
+        default:
+            return "Unknown";
     }
 };
 
@@ -131,6 +157,14 @@ export default function ContactsTable({ contacts }: ContactsTableProps) {
                     bValue = b.latest_contact_again_due_date
                         ? new Date(b.latest_contact_again_due_date).getTime()
                         : Number.MAX_SAFE_INTEGER;
+                    break;
+                case "workflow_stage":
+                    aValue = formatWorkflowStage(
+                        a.workflow_stage
+                    ).toLowerCase();
+                    bValue = formatWorkflowStage(
+                        b.workflow_stage
+                    ).toLowerCase();
                     break;
                 default:
                     return 0;
@@ -282,6 +316,16 @@ export default function ContactsTable({ contacts }: ContactsTableProps) {
                                     {getSortIcon("contact_due_date")}
                                 </Button>
                             </TableHead>
+                            <TableHead>
+                                <Button
+                                    variant="ghost"
+                                    onClick={() => handleSort("workflow_stage")}
+                                    className="h-auto p-0 font-semibold"
+                                >
+                                    Workflow Stage
+                                    {getSortIcon("workflow_stage")}
+                                </Button>
+                            </TableHead>
                             <TableHead>Next Steps</TableHead>
                             <TableHead className="text-right">
                                 Actions
@@ -326,6 +370,13 @@ export default function ContactsTable({ contacts }: ContactsTableProps) {
                                                 (OVERDUE)
                                             </span>
                                         )}
+                                    </TableCell>
+                                    <TableCell>
+                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                                            {formatWorkflowStage(
+                                                contact.workflow_stage
+                                            )}
+                                        </span>
                                     </TableCell>
                                     <TableCell>
                                         {contact.latest_next_steps || "N/A"}

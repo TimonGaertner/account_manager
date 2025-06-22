@@ -5,6 +5,7 @@ import type {
     Contact,
     Communication,
     AddCommunicationFormData,
+    WorkflowStage,
 } from "@/lib/types";
 import {
     Card,
@@ -43,6 +44,7 @@ import {
     ArrowUpDownIcon,
     ArrowUpIcon,
     ArrowDownIcon,
+    WorkflowIcon,
 } from "lucide-react";
 import { format, parseISO, isValid } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
@@ -52,7 +54,10 @@ import ContactForm from "@/components/dialogs/contact-form";
 import { useRouter } from "next/navigation"; // Import useRouter
 
 interface ContactDetailViewProps {
-    contactDetails: Contact & { communications: Communication[] };
+    contactDetails: Contact & {
+        communications: Communication[];
+        workflow_stage?: WorkflowStage | null;
+    };
 }
 
 type CommunicationSortField =
@@ -71,6 +76,24 @@ const formatDateSafe = (dateString?: string | null, dateFormat = "PPP") => {
             : "Invalid Date";
     } catch (error) {
         return "Invalid Date";
+    }
+};
+
+// Helper to format workflow stage for display
+const formatWorkflowStage = (stage?: WorkflowStage | null): string => {
+    if (!stage) return "Not in workflow";
+
+    switch (stage) {
+        case "potentials":
+            return "Potential";
+        case "incoming_requests":
+            return "Incoming Request";
+        case "contacted_contacts":
+            return "Contacted";
+        case "clients":
+            return "Client";
+        default:
+            return "Unknown";
     }
 };
 
@@ -253,6 +276,17 @@ export default function ContactDetailView({
                                 </span>
                             </div>
                         )}
+                        <div className="flex items-center">
+                            <WorkflowIcon className="h-4 w-4 mr-3 text-muted-foreground" />
+                            <span className="text-sm">
+                                Workflow Stage:{" "}
+                                <Badge variant="outline" className="ml-1">
+                                    {formatWorkflowStage(
+                                        initialContactDetails.workflow_stage
+                                    )}
+                                </Badge>
+                            </span>
+                        </div>
                         {initialContactDetails.address && (
                             <div className="flex items-start">
                                 <MapPinIcon className="h-4 w-4 mr-3 mt-1 text-muted-foreground" />

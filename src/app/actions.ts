@@ -143,7 +143,10 @@ export async function getClients(): Promise<ClientEntry[]> {
 }
 
 export async function getAllContacts(): Promise<
-    (Contact & LatestCommunicationDetails)[]
+    (Contact &
+        LatestCommunicationDetails & {
+            workflow_stage?: WorkflowStage | null;
+        })[]
 > {
     const supabase = await createSupabaseServerClient();
     const { data, error } = await supabase
@@ -157,16 +160,17 @@ export async function getAllContacts(): Promise<
 
     if (!data) return [];
 
-    // Enrich each contact with their latest communication details
+    // Enrich each contact with their latest communication details and workflow stage
     const enrichedContacts = await Promise.all(
         data.map(async (contact: Contact) => {
-            const latestCommDetails = await getContactWithLatestComm(
-                supabase,
-                contact.id
-            );
+            const [latestCommDetails, workflowStage] = await Promise.all([
+                getContactWithLatestComm(supabase, contact.id),
+                getContactWorkflowStage(contact.id),
+            ]);
             return {
                 ...contact,
                 ...latestCommDetails,
+                workflow_stage: workflowStage,
             };
         })
     );
@@ -176,7 +180,13 @@ export async function getAllContacts(): Promise<
 
 export async function getContactById(
     id: string
-): Promise<(Contact & { communications: Communication[] }) | null> {
+): Promise<
+    | (Contact & {
+          communications: Communication[];
+          workflow_stage?: WorkflowStage | null;
+      })
+    | null
+> {
     const supabase = await createSupabaseServerClient();
     const { data, error } = await supabase
         .from("contacts")
@@ -193,7 +203,19 @@ export async function getContactById(
         console.error(`Error fetching contact ${id}:`, error);
         return null;
     }
-    return data as (Contact & { communications: Communication[] }) | null;
+
+    if (!data) return null;
+
+    // Get the workflow stage for this contact
+    const workflowStage = await getContactWorkflowStage(id);
+
+    return {
+        ...data,
+        workflow_stage: workflowStage,
+    } as Contact & {
+        communications: Communication[];
+        workflow_stage?: WorkflowStage | null;
+    };
 }
 
 export async function addContact(
@@ -496,4 +518,32 @@ export async function deleteContact(
     revalidatePath("/contacts");
     // No need to revalidate /contacts/[id] as it will be gone
     return { success: true, message: "Contact deleted successfully." };
+}
+
+export async function getContactWorkflowStage(
+    contactId: string
+): Promise<WorkflowStage | null> {
+    const supabase = await createSupabaseServerClient();
+
+    // Check each workflow stage table to see which one contains this contact
+    const stages: WorkflowStage[] = [
+        "potentials",
+        "incoming_requests",
+        "contacted_contacts",
+        "clients",
+    ];
+
+    for (const stage of stages) {
+        const { data, error } = await supabase
+            .from(stage)
+            .select("contact_id")
+            .eq("contact_id", contactId)
+            .single();
+
+        if (data && !error) {
+            return stage;
+        }
+    }
+
+    return null; // Contact is not in any workflow stage
 }
