@@ -282,6 +282,7 @@ export default function ContactsTable({ contacts }: ContactsTableProps) {
                                     {getSortIcon("contact_due_date")}
                                 </Button>
                             </TableHead>
+                            <TableHead>Next Steps</TableHead>
                             <TableHead className="text-right">
                                 Actions
                             </TableHead>
@@ -325,6 +326,9 @@ export default function ContactsTable({ contacts }: ContactsTableProps) {
                                                 (OVERDUE)
                                             </span>
                                         )}
+                                    </TableCell>
+                                    <TableCell>
+                                        {contact.latest_next_steps || "N/A"}
                                     </TableCell>
                                     <TableCell className="text-right">
                                         <DropdownMenu>

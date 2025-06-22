@@ -39,7 +39,7 @@ export default function AddContactToPotentialButton() {
             });
         }
     };
-
+    return null;
     return (
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
             <DialogTrigger asChild>

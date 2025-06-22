@@ -68,6 +68,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { Input } from "../ui/input";
 import { Textarea } from "../ui/textarea";
 import { useRouter } from "next/navigation";
+import AddContactToStageButton from "./add-contact-to-stage-button";
 
 type WorkflowData =
     | PotentialEntry
@@ -420,12 +421,6 @@ export default function WorkflowTable({ stage, data }: WorkflowTableProps) {
         }
     };
 
-    if (!data || data.length === 0) {
-        return (
-            <p className="text-muted-foreground">No contacts in this stage.</p>
-        );
-    }
-
     const commonTableHeaders = (
         <>
             <TableHead className="w-[200px]">
@@ -553,6 +548,9 @@ export default function WorkflowTable({ stage, data }: WorkflowTableProps) {
 
     return (
         <>
+            <div className="mb-4 flex justify-end">
+                <AddContactToStageButton stage={stage} />
+            </div>
             <Table>
                 <TableHeader>
                     <TableRow>

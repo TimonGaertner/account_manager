@@ -410,6 +410,68 @@ export async function addContactToPotentials(
     return addContact(formData, "potentials");
 }
 
+// Action to add a new contact directly to Incoming Requests
+export async function addContactToIncomingRequests(
+    formData: AddContactFormData,
+    requestNotes?: string
+): Promise<{ success: boolean; message: string; contact?: Contact }> {
+    const result = await addContact(formData, "incoming_requests");
+    if (result.success && result.contact && requestNotes) {
+        // Add notes and date_of_request to the incoming request entry
+        const supabase = await createSupabaseServerClient();
+        await supabase
+            .from("incoming_requests")
+            .update({
+                notes: requestNotes,
+                date_of_request: new Date().toISOString(),
+            })
+            .eq("contact_id", result.contact.id);
+    }
+    return result;
+}
+
+// Action to add a new contact directly to Contacted Contacts
+export async function addContactToContactedContacts(
+    formData: AddContactFormData,
+    contactNotes?: string,
+    initialWayOfContact: "incoming/warm" | "outbound/cold" = "outbound/cold"
+): Promise<{ success: boolean; message: string; contact?: Contact }> {
+    const result = await addContact(formData, "contacted_contacts");
+    if (result.success && result.contact) {
+        // Add notes and initial_way_of_contact to the contacted contact entry
+        const supabase = await createSupabaseServerClient();
+        await supabase
+            .from("contacted_contacts")
+            .update({
+                notes: contactNotes,
+                initial_way_of_contact: initialWayOfContact,
+            })
+            .eq("contact_id", result.contact.id);
+    }
+    return result;
+}
+
+// Action to add a new contact directly to Clients
+export async function addContactToClients(
+    formData: AddContactFormData,
+    contractConditions?: string,
+    contractNumber?: string
+): Promise<{ success: boolean; message: string; contact?: Contact }> {
+    const result = await addContact(formData, "clients");
+    if (result.success && result.contact) {
+        // Add contract details to the client entry
+        const supabase = await createSupabaseServerClient();
+        await supabase
+            .from("clients")
+            .update({
+                contract_conditions: contractConditions,
+                contract_number: contractNumber,
+            })
+            .eq("contact_id", result.contact.id);
+    }
+    return result;
+}
+
 export async function deleteContact(
     contactId: string
 ): Promise<{ success: boolean; message: string }> {
